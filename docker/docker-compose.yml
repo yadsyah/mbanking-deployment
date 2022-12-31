@@ -244,10 +244,11 @@ services:
       KAFKA_HOST: kafka1
       KAFKA_PORT: 9092
       PORT: 8080
-      DB_HOST: db-notification-service
-      DB_PORT: 27017
-      DB_ENGINE: mongodb
-      DB_NAME: mbanking-inbox
+      MONGO_DATABASE: db-notification-service
+      MONGO_USERNAME: root
+      MONGO_PASSWORD: password
+      MONGO_PORT: 27017
+      MONGO_NAME: mbanking-inbox
       SPRING_PROFILES_ACTIVE: docker
     ports:
       - 9203:8080
