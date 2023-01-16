@@ -1,0 +1,204 @@
+version: '3.1'
+services:
+# DB Layers
+  db-favourite-service:
+    image: postgres:latest
+    hostname: db-favourite-service
+    container_name: db-favourite-service
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      PGDATA: /data/postgres
+      POSTGRES_DB: favourite
+    volumes:
+       - postgres_favourite:/data/postgres
+
+  db-digital-opening-service:
+    image: postgres:latest
+    hostname: db-digital-opening-service
+    container_name: db-digital-opening-service
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      PGDATA: /data/postgres
+      POSTGRES_DB: digital_opening
+    ports:
+      - 5432:5432
+    volumes:
+       - postgres_digital_opening:/data/postgres
+
+  db-notification-service:
+    image: mongo
+    container_name: db-notification-service
+    hostname: db-notification-service
+    restart: always
+    volumes:
+      - mongodb_data_notification:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
+      
+  zookeeper1:
+    image: confluentinc/cp-zookeeper:latest
+    hostname: zookeeper1
+    container_name: zookeeper1
+    restart: always
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_SERVERS: zookeeper1:2888:3888
+      ZOOKEEPER_SERVER_ID: 1
+    ports:
+      - 22181:2181
+
+  kafka1:
+    image: confluentinc/cp-kafka:latest
+    hostname: kafka1
+    container_name: kafka1
+    depends_on:
+      - zookeeper1
+    ports:
+      - 29092:29092
+      - 9999:9999
+      - 9092:9092
+      - 19092:19092
+    restart: always
+    environment:
+      KAFKA_ADVERTISED_HOST_NAME: kafka1
+      KAFKA_BROKER_ID: 1
+      ALLOW_PLAINTEXT_LISTENER: yes
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper1:2181
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka1:19092,EXTERNAL://${DOCKER_HOST_IP:-127.0.0.1}:9092,DOCKER://host.docker.internal:29092,KAFKA_DOCKER://kafka1:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,DOCKER:PLAINTEXT,KAFKA_DOCKER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_JMX_HOSTNAME: ${DOCKER_HOST_IP:-127.0.0.1}
+      KAFKA_JMX_PORT: 9999
+# Notif Type Apps Layer
+  notification-service:
+    image: diyset/notification-service:master-latest
+    hostname: notification-service
+    container_name: notification-service
+    environment:
+      DEBUG: false
+      DB_ENGINE: mongodb
+      DB_USER: root
+      DB_PASSWORD: example
+      DB_NAME: mbanking_notification
+      DB_PORT: 27017
+      DB_HOST: db-notification-service
+      KAFKA_HOST: kafka1:9094
+      KAFKA_PORT: 9092
+      PORT: 8080
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      - dbnotif
+      - kafka1
+      - zookeeper1
+    ports:
+      - 9202:8080
+
+  digital-opening-service:
+    image: diyset/digital-opening-service:master-latest
+    hostname: digital-opening-service
+    container_name: digital-opening-service
+    environment:
+      DEBUG: false
+      DB_HOST: db-digital-opening-service
+      DB_PORT: 5432
+      DB_ENGINE: postgres
+      DB_NAME: digital_opening
+      SPRING_PROFILES_ACTIVE: docker
+      KAFKA_HOST: kafka1:9094
+      PORT: 8080
+      DB_DDL: update
+    ports:
+      - 9201:8080
+    depends_on:
+      - db-digital-opening-service
+      - kafka1
+      - zookeeper1
+
+  firebase-service:
+    image: diyset/firebase-service:master-latest
+    container_name: firebase-service
+    hostname: firebase-service
+    environment:
+      KAFKA_HOST: kafka1:9094
+      KAFKA_PORT: 9092
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      - kafka1
+      - zookeper1
+
+  mail-service:
+    image: diyset/mail-service:master-latest
+    container_name: mail-service
+    hostname: mail-service
+    environment:
+      KAFKA_HOST: kafka1:9094
+      KAFKA_PORT: 9092
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      - kafka1
+      - zookeper1
+
+  inbox-service:
+    image: diyset/inbox-service:master-latest
+    container_name: inbox-service
+    hostname: inbox-service
+    environment:
+      KAFKA_HOST: kafka1:9094
+      KAFKA_PORT: 9092
+      PORT: 8080
+      MONGO_HOST: db-notification-service
+      MONGO_USERNAME: root
+      MONGO_PASSWORD: example
+      MONGO_PORT: 27017
+      MONGO_DATABASE: mbanking_inbox
+      SPRING_PROFILES_ACTIVE: docker
+    ports:
+      - 9203:8080
+    depends_on:
+      - kafka1
+      - zookeper1
+      - db-notification-service
+
+  sms-service:
+    image: diyset/sms-service:master-latest
+    container_name: sms-service
+    hostname: sms-service
+    environment:
+      KAFKA_HOST: kafka1:9094
+      KAFKA_PORT: 9092
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      - kafka1
+      - zookeper1
+
+  favourite-service:
+    image: diyset/favourite-service:master-latest
+    hostname: favourite-service
+    container_name: favourite-service
+    environment:
+      DEBUG: false
+      DB_PORT: 5432
+      DB_HOST: db-favourite-service
+      DB_ENGINE: postgres
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: favourite
+      SPRING_PROFILES_ACTIVE: docker
+      PORT: 8080
+    ports:
+      - 9206:8080
+    command: --spring.profiles.active=docker
+    depends_on:
+      - db-favourite-service
+      - zipkin
+      - logstash
+
+volumes:
+  mongodb_data_notification:
+  postgres_digital_opening:
+  postgres_favourite:

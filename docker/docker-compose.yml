@@ -298,6 +298,27 @@ services:
       - db-bill-topup-service
       - zipkin
       - logstash
+  favourite-service:
+    image: diyset/favourite-service:master-latest
+    hostname: favourite-service
+    container_name: favourite-service
+    environment:
+      DEBUG: false
+      DB_PORT: 5432
+      DB_HOST: db-favourite-service
+      DB_ENGINE: postgres
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: favourite
+      SPRING_PROFILES_ACTIVE: docker
+      PORT: 8080
+    ports:
+      - 9206:8080
+    command: --spring.profiles.active=docker
+    depends_on:
+      - db-favourite-service
+      - zipkin
+      - logstash
 
 volumes:
     postgres_digital_opening:
